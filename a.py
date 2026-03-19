@@ -251,7 +251,7 @@ def generate_feedback_data(n=50):
 
 st.set_page_config(page_title="Rule-Based Data Generator", layout="wide")
 
-st.title("📊 Rule-Based Data Generator")
+st.title(" Rule-Based Data Generator")
 st.markdown(
     "Generates realistic **User Behavior Events** and **User Feedback** — "
     "rule-based topics, **random combinations every click**."
@@ -282,8 +282,7 @@ if generate:
         m3.metric("Drop-offs",     len(df_b[df_b["Category"] == "Drop-off"]))
         m4.metric("Conversions",   len(df_b[df_b["Category"] == "Conversion"]))
 
-        with st.expander("📈 Category Breakdown", expanded=True):
-            st.bar_chart(df_b["Category"].value_counts())
+       
 
         st.dataframe(df_b, use_container_width=True, hide_index=True)
         st.download_button(
@@ -302,8 +301,7 @@ if generate:
         m3.metric("Bug Reports",     len(df_f[df_f["Category"] == "Bug"]))
         m4.metric("Avg Rating",      f"{df_f['Rating'].mean():.1f} ⭐")
 
-        with st.expander("📈 Priority Breakdown", expanded=True):
-            st.bar_chart(df_f["Priority"].value_counts())
+        
 
         st.dataframe(df_f, use_container_width=True, hide_index=True)
         st.download_button(

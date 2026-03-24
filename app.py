@@ -4,77 +4,12 @@ import random
 import json
 import os
 import sqlite3
-import base64
 from datetime import datetime, timedelta
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 
-SAVE_FILE        = "generated_data.json"
-DB_FILE          = "datasets.db"
-LOGO_VIDEO_PATH  = "logo.mp4"   # ← change to your actual file path
-SPLASH_DURATION  = 4            # seconds to show splash
-
-# ─── Splash Screen ────────────────────────────────────────────────────────────
-
-if "splash_done" not in st.session_state:
-    st.session_state.splash_done = False
-
-if not st.session_state.splash_done:
-    st.set_page_config(page_title="Loading...", layout="centered")
-
-    with open(LOGO_VIDEO_PATH, "rb") as f:
-        video_b64 = base64.b64encode(f.read()).decode()
-
-    st.markdown(f"""
-        <style>
-            /* Hide everything — sidebar, toolbar, header, deploy button */
-            #MainMenu, header, footer,
-            [data-testid="stSidebar"],
-            [data-testid="stToolbar"],
-            [data-testid="stDecoration"],
-            [data-testid="stStatusWidget"],
-            .stDeployButton,
-            section[data-testid="stSidebarContent"] {{
-                display: none !important;
-                visibility: hidden !important;
-            }}
-
-            /* Remove all padding/margin from main container */
-            .block-container {{
-                padding: 0 !important;
-                margin: 0 !important;
-                max-width: 100vw !important;
-            }}
-
-            /* Full-viewport centered layout using default bg */
-            .splash-wrapper {{
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                height: 100vh;
-                width: 100vw;
-                background : #000;
-            }}
-
-            video.splash-video {{
-                max-width: 420px;
-                width: 70vw;
-                border-radius: 10px;
-            }}
-        </style>
-
-        <div class="splash-wrapper">
-            <video class="splash-video" autoplay muted playsinline>
-                <source src="data:video/mp4;base64,{video_b64}" type="video/mp4">
-            </video>
-        </div>
-    """, unsafe_allow_html=True)
-
-    import time
-    time.sleep(SPLASH_DURATION)
-    st.session_state.splash_done = True
-    st.rerun()
+SAVE_FILE = "generated_data.json"
+DB_FILE   = "datasets.db"
 
 # ─── Rule-based Templates ─────────────────────────────────────────────────────
 
@@ -261,14 +196,14 @@ for key, default in [
     if key not in st.session_state:
         st.session_state[key] = default
 
-# ─── Page config (main app) ───────────────────────────────────────────────────
+# ─── Page config ──────────────────────────────────────────────────────────────
 
-st.set_page_config(page_title="Rule-Based Data Generator", layout="wide", page_icon="📊")
+st.set_page_config(page_title="Hello Pam", layout="wide", page_icon="assests/img.png")
 
 # ─── Sidebar ──────────────────────────────────────────────────────────────────
 
 with st.sidebar:
-    st.header("⚙️ Settings")
+    st.header(" Settings")
     n_rows = st.slider("Rows per table", 10, 200, 50, step=10)
     st.markdown("---")
     show_behavior = st.checkbox("User Behavior Events", value=True)
@@ -277,21 +212,22 @@ with st.sidebar:
 
     saved_names = get_saved_dataset_names()
     count_label = f"({len(saved_names)})" if saved_names else "(0)"
-    if st.button(f"🗂️ Saved Datasets {count_label}", use_container_width=True):
+    if st.button(f" Saved Datasets {count_label}", use_container_width=True):
         st.switch_page("pages/saved_datasets.py")
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
-st.title("📊 Rule-Based Data Generator")
+st.title("Hello Pam")
 st.markdown(
-    "Generates realistic **User Behavior Events** and **User Feedback** — "
-    "rule-based topics, random combinations every click. "
-    "**Data persists across refreshes** until cleared."
+    "Product assistant for **Analyzing Data** and **Generating Insights** " 
+    
+   
 )
 
 df_b, df_f, generated_at, n_rows_used = load_json()
 data_exists = df_b is not None or df_f is not None
 
+# Generate button (top)
 col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
     generate = st.button("⚡ Generate Data", use_container_width=True)
@@ -308,6 +244,7 @@ if generate:
     data_exists = True
     st.rerun()
 
+# Display
 if data_exists:
     st.success(f"✅ Showing {n_rows_used} rows each — generated at {generated_at}")
     st.markdown("---")
@@ -319,8 +256,7 @@ if data_exists:
         m2.metric("High Severity", len(df_b[df_b["Severity"] == "High"]))
         m3.metric("Drop-offs",     len(df_b[df_b["Category"] == "Drop-off"]))
         m4.metric("Conversions",   len(df_b[df_b["Category"] == "Conversion"]))
-        with st.expander("📈 Category Breakdown", expanded=True):
-            st.bar_chart(df_b["Category"].value_counts())
+        
         st.dataframe(df_b, use_container_width=True, hide_index=True)
         st.download_button("⬇️ Download Behavior CSV", df_b.to_csv(index=False).encode(), "behavior_events.csv", "text/csv")
 
@@ -332,13 +268,13 @@ if data_exists:
         m2.metric("Critical Issues", len(df_f[df_f["Priority"] == "Critical"]))
         m3.metric("Bug Reports",     len(df_f[df_f["Category"] == "Bug"]))
         m4.metric("Avg Rating",      f"{df_f['Rating'].mean():.1f} ⭐")
-        with st.expander("📈 Priority Breakdown", expanded=True):
-            st.bar_chart(df_f["Priority"].value_counts())
+        
         st.dataframe(df_f, use_container_width=True, hide_index=True)
         st.download_button("⬇️ Download Feedback CSV", df_f.to_csv(index=False).encode(), "user_feedback.csv", "text/csv")
 
     st.markdown("---")
 
+    # Save input panel
     if st.session_state.show_save_input:
         st.markdown("#### 💾 Save Dataset")
         sc1, sc2 = st.columns([3, 1])
@@ -366,6 +302,7 @@ if data_exists:
     if st.session_state.save_success_msg:
         st.success(st.session_state.save_success_msg)
 
+    # Save + Clear at bottom
     col1, col2, col3, col4, col5 = st.columns([1, 1.5, 0.3, 1.5, 1])
     with col2:
         if st.button("💾 Save", use_container_width=True, type="primary"):

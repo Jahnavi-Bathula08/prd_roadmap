@@ -3,13 +3,11 @@ import pandas as pd
 import random
 import json
 import os
-import sqlite3
 from datetime import datetime, timedelta
+from ml_analysis import run_analysis          # ← ML module
 
-# ─── Config ───────────────────────────────────────────────────────────────────
-
+# ─── Persistence File Path ────────────────────────────────────────────────────
 SAVE_FILE = "generated_data.json"
-DB_FILE   = "datasets.db"
 
 # ─── Rule-based Templates ─────────────────────────────────────────────────────
 
@@ -47,83 +45,9 @@ PLATFORMS  = ["Android", "iOS", "Web"]
 REGIONS    = ["North", "South", "East", "West", "Central"]
 AGE_GROUPS = ["18-24", "25-34", "35-44", "45-54", "55+"]
 
-# ─── SQLite helpers ───────────────────────────────────────────────────────────
+# ─── Save / Load helpers ──────────────────────────────────────────────────────
 
-def init_db():
-    con = sqlite3.connect(DB_FILE)
-    cur = con.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS behavior_table (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            dataset_name TEXT,
-            saved_at     TEXT,
-            user_id      TEXT,
-            timestamp    TEXT,
-            event        TEXT,
-            category     TEXT,
-            severity     TEXT,
-            platform     TEXT,
-            region       TEXT,
-            session_sec  INTEGER
-        )
-    """)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS feedback_table (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            dataset_name TEXT,
-            saved_at     TEXT,
-            user_id      TEXT,
-            timestamp    TEXT,
-            feedback     TEXT,
-            category     TEXT,
-            priority     TEXT,
-            age_group    TEXT,
-            platform     TEXT,
-            rating       INTEGER
-        )
-    """)
-    con.commit()
-    con.close()
-
-def dataset_name_exists(name: str) -> bool:
-    con = sqlite3.connect(DB_FILE)
-    cur = con.cursor()
-    cur.execute("SELECT 1 FROM behavior_table WHERE dataset_name = ? LIMIT 1", (name,))
-    row = cur.fetchone()
-    if not row:
-        cur.execute("SELECT 1 FROM feedback_table WHERE dataset_name = ? LIMIT 1", (name,))
-        row = cur.fetchone()
-    con.close()
-    return row is not None
-
-def save_to_db(df_behavior, df_feedback, name: str):
-    saved_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    con = sqlite3.connect(DB_FILE)
-    if df_behavior is not None:
-        df_b = df_behavior.copy()
-        df_b.insert(0, "dataset_name", name)
-        df_b.insert(1, "saved_at", saved_at)
-        df_b.columns = ["dataset_name", "saved_at", "user_id", "timestamp", "event", "category", "severity", "platform", "region", "session_sec"]
-        df_b.to_sql("behavior_table", con, if_exists="append", index=False)
-    if df_feedback is not None:
-        df_f = df_feedback.copy()
-        df_f.insert(0, "dataset_name", name)
-        df_f.insert(1, "saved_at", saved_at)
-        df_f.columns = ["dataset_name", "saved_at", "user_id", "timestamp", "feedback", "category", "priority", "age_group", "platform", "rating"]
-        df_f.to_sql("feedback_table", con, if_exists="append", index=False)
-    con.close()
-
-def get_saved_dataset_names():
-    con = sqlite3.connect(DB_FILE)
-    cur = con.cursor()
-    cur.execute("SELECT DISTINCT dataset_name FROM behavior_table UNION SELECT DISTINCT dataset_name FROM feedback_table ORDER BY dataset_name")
-    rows = [r[0] for r in cur.fetchall()]
-    con.close()
-    return rows
-
-# ─── JSON persistence ─────────────────────────────────────────────────────────
-
-def save_json(df_behavior, df_feedback, generated_at, n_rows):
+def save_data(df_behavior, df_feedback, generated_at, n_rows):
     payload = {
         "generated_at": generated_at,
         "n_rows": n_rows,
@@ -133,7 +57,7 @@ def save_json(df_behavior, df_feedback, generated_at, n_rows):
     with open(SAVE_FILE, "w") as f:
         json.dump(payload, f)
 
-def load_json():
+def load_data():
     if not os.path.exists(SAVE_FILE):
         return None, None, None, None
     with open(SAVE_FILE, "r") as f:
@@ -142,7 +66,7 @@ def load_json():
     df_f = pd.DataFrame(payload["feedback"]) if payload.get("feedback") else None
     return df_b, df_f, payload.get("generated_at"), payload.get("n_rows")
 
-def clear_json():
+def clear_saved_data():
     if os.path.exists(SAVE_FILE):
         os.remove(SAVE_FILE)
 
@@ -184,50 +108,29 @@ def generate_feedback_data(n=50):
         })
     return pd.DataFrame(rows)
 
-# ─── Init ─────────────────────────────────────────────────────────────────────
+# ─── App ──────────────────────────────────────────────────────────────────────
 
-init_db()
+st.set_page_config(page_title="Rule-Based Data Generator", layout="wide")
 
-for key, default in [
-    ("show_save_input", False),
-    ("save_success_msg", ""),
-    ("save_error_msg", ""),
-]:
-    if key not in st.session_state:
-        st.session_state[key] = default
-
-# ─── Page config ──────────────────────────────────────────────────────────────
-
-st.set_page_config(page_title="Hello Pam", layout="wide", page_icon="assests/img.png")
-
-# ─── Sidebar ──────────────────────────────────────────────────────────────────
+st.title("📊 Rule-Based Data Generator")
+st.markdown(
+    "Generates realistic **User Behavior Events** and **User Feedback** — "
+    "rule-based topics, random combinations every click. "
+    "**Data persists even after page refresh** until you clear it."
+)
 
 with st.sidebar:
-    st.header(" Settings")
+    st.header("⚙️ Settings")
     n_rows = st.slider("Rows per table", 10, 200, 50, step=10)
     st.markdown("---")
     show_behavior = st.checkbox("User Behavior Events", value=True)
     show_feedback  = st.checkbox("User Feedback",        value=True)
-    st.markdown("---")
 
-    saved_names = get_saved_dataset_names()
-    count_label = f"({len(saved_names)})" if saved_names else "(0)"
-    if st.button(f" Saved Datasets {count_label}", use_container_width=True):
-        st.switch_page("pages/saved_datasets.py")
-
-# ─── Main ─────────────────────────────────────────────────────────────────────
-
-st.title("Hello Pam")
-st.markdown(
-    "Product assistant for **Analyzing Data** and **Generating Insights** " 
-    
-   
-)
-
-df_b, df_f, generated_at, n_rows_used = load_json()
+# Load from disk on every page load / refresh
+df_b, df_f, generated_at, n_rows_used = load_data()
 data_exists = df_b is not None or df_f is not None
 
-# Generate button (top)
+# ─── Generate button ──────────────────────────────────────────────────────────
 col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
     generate = st.button("⚡ Generate Data", use_container_width=True)
@@ -237,14 +140,13 @@ if generate:
     df_f         = generate_feedback_data(n_rows) if show_feedback else None
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     n_rows_used  = n_rows
-    save_json(df_b, df_f, generated_at, n_rows_used)
-    st.session_state.show_save_input  = False
-    st.session_state.save_success_msg = ""
-    st.session_state.save_error_msg   = ""
-    data_exists = True
+    save_data(df_b, df_f, generated_at, n_rows_used)
+    # reset any previous analysis when new data is generated
+    st.session_state.pop("show_analysis", None)
+    data_exists  = True
     st.rerun()
 
-# Display
+# ─── Display data ─────────────────────────────────────────────────────────────
 if data_exists:
     st.success(f"✅ Showing {n_rows_used} rows each — generated at {generated_at}")
     st.markdown("---")
@@ -256,7 +158,6 @@ if data_exists:
         m2.metric("High Severity", len(df_b[df_b["Severity"] == "High"]))
         m3.metric("Drop-offs",     len(df_b[df_b["Category"] == "Drop-off"]))
         m4.metric("Conversions",   len(df_b[df_b["Category"] == "Conversion"]))
-        
         st.dataframe(df_b, use_container_width=True, hide_index=True)
         st.download_button("⬇️ Download Behavior CSV", df_b.to_csv(index=False).encode(), "behavior_events.csv", "text/csv")
 
@@ -268,55 +169,28 @@ if data_exists:
         m2.metric("Critical Issues", len(df_f[df_f["Priority"] == "Critical"]))
         m3.metric("Bug Reports",     len(df_f[df_f["Category"] == "Bug"]))
         m4.metric("Avg Rating",      f"{df_f['Rating'].mean():.1f} ⭐")
-        
         st.dataframe(df_f, use_container_width=True, hide_index=True)
         st.download_button("⬇️ Download Feedback CSV", df_f.to_csv(index=False).encode(), "user_feedback.csv", "text/csv")
 
+    # ─── Action buttons row ───────────────────────────────────────────────────
     st.markdown("---")
+    btn1, btn2, btn3 = st.columns([1, 2, 1])
 
-    # Save input panel
-    if st.session_state.show_save_input:
-        st.markdown("#### 💾 Save Dataset")
-        sc1, sc2 = st.columns([3, 1])
-        with sc1:
-            dataset_name = st.text_input("Name", placeholder="e.g. sprint_1_data, march_test_run …", label_visibility="collapsed")
-        with sc2:
-            confirm = st.button("✅ Confirm", use_container_width=True)
-        if st.session_state.save_error_msg:
-            st.error(st.session_state.save_error_msg)
-        if confirm:
-            name = dataset_name.strip()
-            if not name:
-                st.session_state.save_error_msg = "⚠️ Dataset name cannot be empty."
-                st.rerun()
-            elif dataset_name_exists(name):
-                st.session_state.save_error_msg = f'❌ "{name}" already exists. Please choose a different name.'
-                st.rerun()
-            else:
-                save_to_db(df_b, df_f, name)
-                st.session_state.save_success_msg = f'✅ Saved as "{name}"'
-                st.session_state.save_error_msg   = ""
-                st.session_state.show_save_input  = False
+    with btn2:
+        # Analyse button (primary) + Clear button (secondary) side by side
+        a_col, c_col = st.columns(2)
+        with a_col:
+            if st.button("🔍 Analyse Data", use_container_width=True, type="primary"):
+                st.session_state["show_analysis"] = True
+        with c_col:
+            if st.button("🗑️ Clear Data", use_container_width=True, type="secondary"):
+                clear_saved_data()
+                st.session_state.pop("show_analysis", None)
                 st.rerun()
 
-    if st.session_state.save_success_msg:
-        st.success(st.session_state.save_success_msg)
-
-    # Save + Clear at bottom
-    col1, col2, col3, col4, col5 = st.columns([1, 1.5, 0.3, 1.5, 1])
-    with col2:
-        if st.button("💾 Save", use_container_width=True, type="primary"):
-            st.session_state.show_save_input  = not st.session_state.show_save_input
-            st.session_state.save_success_msg = ""
-            st.session_state.save_error_msg   = ""
-            st.rerun()
-    with col4:
-        if st.button("🗑️ Clear Data", use_container_width=True, type="secondary"):
-            clear_json()
-            st.session_state.show_save_input  = False
-            st.session_state.save_success_msg = ""
-            st.session_state.save_error_msg   = ""
-            st.rerun()
+    # ─── ML Analysis output (persists until new Generate or Clear) ────────────
+    if st.session_state.get("show_analysis"):
+        run_analysis(df_b, df_f)
 
 else:
     col1, col2, col3 = st.columns([1, 2, 1])

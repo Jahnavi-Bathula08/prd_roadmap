@@ -349,7 +349,7 @@ def render_header():
                     color: #e6edf3;
                     letter-spacing: -0.02em;
                     line-height: 1;
-                ">DataForge Studio</div>
+                ">Product Studio</div>
                 <div style="
                     font-family: 'JetBrains Mono', monospace;
                     font-size: 0.72rem;
@@ -444,7 +444,7 @@ def render_empty_state():
 # ─── App ──────────────────────────────────────────────────────────────────────
 
 st.set_page_config(
-    page_title="DataForge Studio",
+    page_title="Product Studio",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
